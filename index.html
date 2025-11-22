@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Worldle Arcade - Globe 3D</title>
+    
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+<script src="//unpkg.com/globe.gl"></script>
+
+<style>
+    :root {
+        --primary: #4cc9f0; --accent: #f72585; --success: #4cc9f0; --warning: #f48c06;
+        --bg-glass: rgba(15, 23, 42, 0.65);
+        --border-glass: 1px solid rgba(255, 255, 255, 0.1);
+        --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        --font-main: 'Outfit', sans-serif;
+    }
+    
+    * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+
+    body {
+        font-family: var(--font-main);
+        background-color: #02040a; color: white;
+        margin: 0; overflow: hidden; height: 100vh; width: 100vw;
+    }
+
+    /* --- GLOBE CONTAINER --- */
+    #scene-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; background: radial-gradient(circle at center, #1a1f35 0%, #02040a 100%); }
+
+    /* --- UI OVERLAYS --- */
+    .hud-layer {
+        position: absolute; z-index: 10; pointer-events: none;
+        width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between;
+        padding: 20px;
+    }
+    
+    .interactive { pointer-events: auto; }
+
+    /* TOP BAR */
+    .top-bar { display: flex; justify-content: space-between; align-items: flex-start; }
+    
+    .player-stats {
+        background: var(--bg-glass); backdrop-filter: blur(12px);
+        padding: 10px 20px; border-radius: 16px; border: var(--border-glass);
+        box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 5px;
+    }
+    .level-badge { font-size: 0.8em; color: #aaa; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+    .xp-bar-container { width: 150px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; margin-top: 5px; }
+    .xp-bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); width: 0%; transition: width 0.5s ease; }
+    .score-text { font-size: 1.4em; font-weight: 800; }
+
+    .combo-container {
+        text-align: right; opacity: 0; transform: scale(0.8); transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .combo-container.active { opacity: 1; transform: scale(1); }
+    .combo-val { font-size: 3em; font-weight: 900; color: var(--accent); text-shadow: 0 0 20px var(--accent); line-height: 1; }
+    .combo-label { font-size: 1em; font-weight: 700; color: white; text-transform: uppercase; letter-spacing: 2px; }
+
+    /* BOTTOM BAR (Input) */
+    .bottom-bar {
+        display: flex; flex-direction: column; align-items: center; gap: 15px;
+        margin-bottom: 20px; transition: transform 0.3s;
+    }
+    
+    .game-input-wrapper {
+        position: relative; width: 100%; max-width: 500px;
+        background: var(--bg-glass); backdrop-filter: blur(16px);
+        border-radius: 20px; padding: 8px; border: var(--border-glass);
+        box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        display: flex; gap: 10px; transition: transform 0.2s;
+    }
+    .game-input-wrapper:focus-within { transform: translateY(-5px); border-color: var(--primary); }
+    
+    #country-input {
+        flex: 1; background: transparent; border: none; color: white;
+        font-family: var(--font-main); font-size: 1.1em; padding: 10px 15px;
+        outline: none;
+    }
+    #country-input::placeholder { color: rgba(255,255,255,0.4); }
+    
+    .action-btn {
+        background: rgba(255,255,255,0.1); border: none; color: white;
+        width: 45px; height: 45px; border-radius: 14px; cursor: pointer;
+        display: flex; justify-content: center; align-items: center; font-size: 1.2em;
+        transition: all 0.2s;
+    }
+    .action-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
+    .action-btn.hint { color: var(--warning); }
+    .action-btn.giveup { color: var(--accent); }
+
+    #target-prompt {
+        text-align: center; background: var(--bg-glass); padding: 10px 20px;
+        border-radius: 12px; backdrop-filter: blur(10px); border: var(--border-glass);
+        animation: slideUp 0.5s ease;
+    }
+    #target-prompt strong { color: var(--primary); font-size: 1.2em; }
+
+    /* --- FLOATERS (XP Popups) --- */
+    .floater {
+        position: absolute; font-weight: 800; font-size: 1.5em;
+        color: var(--success); pointer-events: none; z-index: 20;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        animation: floatUp 1.5s forwards ease-out;
+    }
+
+    /* --- MODALS --- */
+    .modal-backdrop {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
+        z-index: 100; display: flex; justify-content: center; align-items: center;
+        opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    }
+    .modal-backdrop.visible { opacity: 1; pointer-events: auto; }
+    
+    .game-card {
+        background: #1e293b; width: 90%; max-width: 400px;
+        border-radius: 24px; padding: 30px; text-align: center;
+        border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .modal-backdrop.visible .game-card { transform: scale(1); }
+
+    h2 { margin: 0 0 10px 0; font-size: 2em; background: linear-gradient(45deg, #4cc9f0, #4361ee); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    
+    .btn-main {
+        background: linear-gradient(45deg, #4361ee, #4cc9f0);
+        border: none; width: 100%; padding: 16px; border-radius: 14px;
+        color: white; font-weight: 700; font-size: 1.1em; cursor: pointer;
+        margin-top: 20px; box-shadow: 0 10px 20px -5px rgba(67, 97, 238, 0.4);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-main:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -5px rgba(67, 97, 238, 0.5); }
+    .btn-main:disabled { opacity: 0.6; cursor: wait; }
+
+    .settings-grid { display: grid; grid-template-columns: 1fr; gap: 15px; text-align: left; margin: 20px 0; }
+    label { font-size: 0.9em; color: #94a3b8; font-weight: 600; margin-bottom: 5px; display: block; }
+    select { width: 100%; padding: 12px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 10px; font-family: var(--font-main); outline: none; }
+
+    /* --- ANIMATIONS --- */
+    @keyframes floatUp { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-50px) scale(1.2); opacity: 0; } }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+    @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
+
+    @media (max-width: 600px) {
+        .player-stats { padding: 8px 15px; }
+        .score-text { font-size: 1.1em; }
+        .game-input-wrapper { width: 95%; }
+        .bottom-bar { margin-bottom: 10px; }
+        /* Fix keyboard hiding content on mobile */
+        body.keyboard-open .top-bar { opacity: 0; pointer-events: none; }
+        body.keyboard-open #globe-viz { height: 50vh; }
+    }
+</style>
+</head>
+<body>
+
+<div id="scene-container"><div id="globe-viz"></div></div>
+
+<div class="hud-layer">
+    <!-- Top Stats -->
+    <div class="top-bar">
+        <div class="player-stats">
+            <div class="level-badge">Niveau <span id="level-val">1</span></div>
+            <div class="xp-bar-container"><div class="xp-bar-fill" id="xp-bar"></div></div>
+            <div class="score-text"><span id="score-current">0</span> / <span id="score-total">0</span></div>
+        </div>
+        <div class="combo-container" id="combo-box">
+            <div class="combo-val" id="combo-display">x1</div>
+            <div class="combo-label">Combo 🔥</div>
+        </div>
+    </div>
+
+    <!-- Center Area (Empty for viewing globe) -->
+
+    <!-- Bottom Controls -->
+    <div class="bottom-bar interactive">
+        <div id="target-prompt" class="hidden">
+            Trouvez : <strong id="target-name">Pays</strong>
+        </div>
+        
+        <div class="game-input-wrapper" id="input-container">
+            <input type="text" id="country-input" placeholder="Nom du pays..." autocomplete="off" spellcheck="false">
+            <button class="action-btn hint" id="btn-hint" title="Indice">💡</button>
+            <button class="action-btn giveup" id="btn-reset" title="Menu">🏠</button>
+        </div>
+    </div>
+</div>
+
+<!-- MENU MODAL -->
+<div id="start-modal" class="modal-backdrop visible interactive">
+    <div class="game-card">
+        <h2>Worldle Arcade</h2>
+        <p style="color:#94a3b8; margin-bottom:20px;">Explorez le monde, gagnez de l'XP et devenez une légende de la géographie.</p>
+        
+        <div class="settings-grid">
+            <div>
+                <label>Région</label>
+                <select id="opt-region">
+                    <option value="World">Monde Entier 🌍</option>
+                    <option value="Europe">Europe 🏰</option>
+                    <option value="Asia">Asie ⛩️</option>
+                    <option value="Africa">Afrique 🦁</option>
+                    <option value="Americas">Amériques 🌎</option>
+                    <option value="Oceania">Océanie 🏝️</option>
+                </select>
+            </div>
+            <div>
+                <label>Mode</label>
+                <select id="opt-mode">
+                    <option value="type">Saisie (Clavier) ⌨️</option>
+                    <option value="click">Localisation (Clic) 🖱️</option>
+                </select>
+            </div>
+        </div>
+
+        <button id="btn-start" class="btn-main" disabled>Chargement...</button>
+    </div>
+</div>
+
+<!-- VICTORY MODAL -->
+<div id="end-modal" class="modal-backdrop interactive">
+    <div class="game-card">
+        <h2 id="end-title">Victoire !</h2>
+        <div style="font-size:3em; margin:10px 0;">🏆</div>
+        <p id="end-msg" style="color:white; font-size:1.2em;">Score: 100%</p>
+        <p style="color:#94a3b8; font-size:0.9em;">XP Gagnée : <span id="end-xp" style="color:var(--success)">+0</span></p>
+        <button id="btn-replay" class="btn-main">Rejouer</button>
+    </div>
+</div>
+
+<script>
+// --- DATA SOURCE ---
+const API_GEO = 'https://cdn.jsdelivr.net/gh/johan/world.geo.json@master/countries.geo.json';
+const API_META = 'https://restcountries.com/v3.1/all?fields=cca3,name,translations,capital,region,latlng,population,flags';
+
+// --- STATE MANAGEMENT ---
+const state = {
+    countries: [],
+    game: { active: false, mode: 'type', region: 'World', found: new Set(), target: null },
+    stats: { xp: 0, level: 1, combo: 1, lastGuessTime: 0 }
+};
+
+const els = {
+    globe: document.getElementById('globe-viz'),
+    input: document.getElementById('country-input'),
+    score: document.getElementById('score-current'),
+    total: document.getElementById('score-total'),
+    xpBar: document.getElementById('xp-bar'),
+    lvl: document.getElementById('level-val'),
+    combo: document.getElementById('combo-box'),
+    comboVal: document.getElementById('combo-display'),
+    prompt: document.getElementById('target-prompt'),
+    targetName: document.getElementById('target-name'),
+    modals: { start: document.getElementById('start-modal'), end: document.getElementById('end-modal') },
+    btns: { start: document.getElementById('btn-start'), replay: document.getElementById('btn-replay'), hint: document.getElementById('btn-hint'), reset: document.getElementById('btn-reset') }
+};
+
+let globe, audioCtx;
+
+// --- AUDIO ENGINE (Synthwave Style) ---
+function initAudio() {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function playSound(type) {
+    if (!audioCtx) initAudio();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (type === 'correct') {
+        // Satisfaction Major Chord
+        playTone(440, 'sine', 0.1); // A4
+        playTone(554.37, 'sine', 0.15); // C#5
+        playTone(659.25, 'sine', 0.2); // E5
+    } else if (type === 'wrong') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, t);
+        osc.frequency.linearRampToValueAtTime(50, t + 0.3);
+        gain.gain.setValueAtTime(0.1, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+        osc.start(t); osc.stop(t + 0.3);
+    } else if (type === 'levelup') {
+        playTone(440, 'square', 0, 0.4);
+        playTone(880, 'square', 0.1, 0.4);
+        playTone(1760, 'square', 0.2, 0.6);
+    }
+}
+
+function playTone(freq, type, delay = 0, duration = 0.3) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = type;
+    osc.frequency.value = freq;
+    const t = audioCtx.currentTime + delay;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.1, t + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    osc.start(t); osc.stop(t + duration);
+}
+
+// --- GLOBE SETUP ---
+async function init() {
+    try {
+        // Load Data with Fallback
+        const [geo, meta] = await Promise.all([
+            fetch(API_GEO).then(r => r.json()),
+            fetch(API_META).then(r => r.json())
+        ]);
+
+        state.countries = geo.features.map(f => {
+            const m = meta.find(c => c.cca3 === f.id);
+            if (!m) return null;
+            return {
+                id: f.id,
+                geo: f,
+                name: m.name.common,
+                fr: m.translations.fra?.common || m.name.common,
+                region: m.region,
+                coords: { lat: m.latlng[0], lng: m.latlng[1] },
+                flag: m.flags.svg
+            };
+        }).filter(x => x);
+
+        setupGlobe();
+        loadProgress();
+        els.btns.start.textContent = "Lancer la partie";
+        els.btns.start.disabled = false;
+
+    } catch (e) {
+        console.error(e);
+        alert("Erreur de chargement. Vérifiez votre connexion.");
+    }
+}
+
+function setupGlobe() {
+    globe = Globe()
+        .backgroundColor('rgba(0,0,0,0)') // Transparent for CSS gradient bg
+        .showAtmosphere(true)
+        .atmosphereColor('#4cc9f0')
+        .atmosphereAltitude(0.15)
+        .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+        .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+        .polygonsData(state.countries.map(c => ({ ...c.geo, data: c })))
+        .polygonSideColor(() => 'rgba(0,0,0,0)')
+        .polygonStrokeColor(() => '#1a2c42')
+        .polygonCapColor(() => 'rgba(30, 41, 59, 0.8)') // Dark default
+        .onPolygonClick(handleMapClick)
+        .onPolygonHover(d => els.globe.style.cursor = d ? 'pointer' : 'grab')
+        .polygonLabel(({ data }) => `
+            <div style="background:rgba(15,23,42,0.9); color:white; padding:5px 10px; border-radius:6px; font-family:sans-serif; border:1px solid rgba(255,255,255,0.2);">
+                ${data.fr}
+            </div>
+        `)
+        (els.globe);
+
+    globe.controls().autoRotate = true;
+    globe.controls().autoRotateSpeed = 0.5;
+    globe.pointOfView({ altitude: 2.5 });
+}
+
+// --- GAME LOOP & LOGIC ---
+function startGame() {
+    const region = document.getElementById('opt-region').value;
+    const mode = document.getElementById('opt-mode').value;
+    
+    state.game.active = true;
+    state.game.region = region;
+    state.game.mode = mode;
+    state.game.found.clear();
+    state.game.dataset = region === 'World' ? state.countries : state.countries.filter(c => c.region === region);
+    state.game.target = null;
+
+    // Reset Stats per game
+    state.stats.combo = 1;
+    els.score.innerText = 0;
+    els.total.innerText = state.game.dataset.length;
+    els.combo.classList.remove('active');
+
+    // UI Switch
+    els.modals.start.classList.remove('visible');
+    els.input.value = '';
+    
+    if (mode === 'click') {
+        els.input.parentElement.style.display = 'none';
+        els.prompt.classList.remove('hidden');
+        nextTarget();
+    } else {
+        els.input.parentElement.style.display = 'flex';
+        els.prompt.classList.add('hidden');
+        els.input.focus();
+        globe.polygonLabel(null); // Hide labels in type mode
+    }
+
+    globe.controls().autoRotate = false;
+    updateGlobeVisuals();
+    
+    // Focus Camera
+    if (state.game.dataset.length > 0) {
+        const first = state.game.dataset[0];
+        globe.pointOfView({ lat: first.coords.lat, lng: first.coords.lng, altitude: 2 }, 1000);
+    }
+}
+
+function checkInput() {
+    if (!state.game.active || state.game.mode !== 'type') return;
+    const val = normalize(els.input.value);
+    const match = state.game.dataset.find(c => !state.game.found.has(c.id) && normalize(c.fr) === val);
+
+    if (match) {
+        success(match);
+        els.input.value = '';
+    }
+}
+
+function handleMapClick(polygon) {
+    if (!state.game.active) return;
+    const c = polygon.data;
+    
+    if (state.game.mode === 'click') {
+        if (c.id === state.game.target.id) {
+            success(c);
+            nextTarget();
+        } else {
+            fail();
+        }
+    }
+}
+
+function success(country) {
+    state.game.found.add(country.id);
+    
+    // Update Combo
+    const now = Date.now();
+    if (now - state.stats.lastGuessTime < 5000) { // 5s for combo
+        state.stats.combo++;
+    } else {
+        state.stats.combo = 1;
+    }
+    state.stats.lastGuessTime = now;
+
+    // FX
+    playSound('correct');
+    spawnConfetti();
+    showFloatingText(`+${10 * state.stats.combo} XP`, window.innerWidth/2, window.innerHeight/2);
+    
+    // XP Gain
+    gainXP(10 * state.stats.combo);
+    
+    // Update UI
+    els.score.innerText = state.game.found.size;
+    updateComboUI();
+    updateGlobeVisuals();
+
+    // Camera Move
+    globe.pointOfView({ lat: country.coords.lat, lng: country.coords.lng, altitude: 1.5 }, 1000);
+
+    if (state.game.found.size === state.game.dataset.length) endGame();
+}
+
+function fail() {
+    state.stats.combo = 1;
+    updateComboUI();
+    playSound('wrong');
+    document.body.classList.add('shake');
+    setTimeout(() => document.body.classList.remove('shake'), 400);
+}
+
+function nextTarget() {
+    const left = state.game.dataset.filter(c => !state.game.found.has(c.id));
+    if (left.length === 0) return endGame();
+    state.game.target = left[Math.floor(Math.random() * left.length)];
+    els.targetName.innerText = state.game.target.fr;
+    
+    // Hint via camera (Subtle)
+    // globe.pointOfView({ lat: state.game.target.coords.lat, lng: state.game.target.coords.lng, altitude: 3 }, 2000);
+}
+
+function updateGlobeVisuals() {
+    globe.polygonCapColor(({ data }) => {
+        if (state.game.found.has(data.id)) return '#4cc9f0'; // Neon Blue Found
+        if (!state.game.active) return 'rgba(30, 41, 59, 0.8)';
+        return 'rgba(30, 41, 59, 0.8)'; // Dark default
+    });
+    // Refresh
+    const d = globe.polygonsData();
+    globe.polygonsData([...d]);
+}
+
+// --- GAMIFICATION SYSTEM ---
+function gainXP(amount) {
+    state.stats.xp += amount;
+    const xpNeeded = state.stats.level * 100;
+    
+    if (state.stats.xp >= xpNeeded) {
+        state.stats.level++;
+        state.stats.xp -= xpNeeded;
+        playSound('levelup');
+        showFloatingText("LEVEL UP!", window.innerWidth/2, window.innerHeight/3, 'var(--accent)');
+    }
+    
+    saveProgress();
+    renderStats();
+}
+
+function renderStats() {
+    els.lvl.innerText = state.stats.level;
+    const pct = (state.stats.xp / (state.stats.level * 100)) * 100;
+    els.xpBar.style.width = `${pct}%`;
+}
+
+function updateComboUI() {
+    if (state.stats.combo > 1) {
+        els.combo.classList.add('active');
+        els.comboVal.innerText = `x${state.stats.combo}`;
+        // Pulse effect
+        els.comboVal.style.transform = 'scale(1.5)';
+        setTimeout(() => els.comboVal.style.transform = 'scale(1)', 200);
+    } else {
+        els.combo.classList.remove('active');
+    }
+}
+
+function showFloatingText(text, x, y, color = null) {
+    const el = document.createElement('div');
+    el.className = 'floater';
+    el.innerText = text;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    if(color) el.style.color = color;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1500);
+}
+
+// --- PERSISTENCE ---
+function saveProgress() {
+    localStorage.setItem('worldle_arcade_xp', state.stats.xp);
+    localStorage.setItem('worldle_arcade_lvl', state.stats.level);
+}
+
+function loadProgress() {
+    state.stats.xp = parseInt(localStorage.getItem('worldle_arcade_xp')) || 0;
+    state.stats.level = parseInt(localStorage.getItem('worldle_arcade_lvl')) || 1;
+    renderStats();
+}
+
+// --- UTILS ---
+function normalize(s) { return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/-/g, " ").trim(); }
+function spawnConfetti() { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#4cc9f0', '#f72585'] }); }
+
+function endGame() {
+    state.game.active = false;
+    els.modals.end.classList.add('visible');
+    document.getElementById('end-xp').innerText = `+${state.game.found.size * 10}`;
+    globe.controls().autoRotate = true;
+}
+
+// --- EVENTS ---
+els.input.addEventListener('input', checkInput);
+els.btns.start.addEventListener('click', startGame);
+els.btns.replay.addEventListener('click', () => {
+    els.modals.end.classList.remove('visible');
+    els.modals.start.classList.add('visible');
+});
+els.btns.reset.addEventListener('click', () => {
+    if(confirm('Quitter la partie en cours ?')) {
+        state.game.active = false;
+        els.modals.start.classList.add('visible');
+        globe.controls().autoRotate = true;
+    }
+});
+
+// Mobile Keyboard Fix
+const viewport = document.querySelector('meta[name=viewport]');
+if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+    els.input.addEventListener('focus', () => {
+        document.body.classList.add('keyboard-open');
+        // Slightly rotate globe up so we see selection area above keyboard
+        globe.pointOfView({ lat: globe.pointOfView().lat + 20, altitude: globe.pointOfView().altitude }, 500);
+    });
+    els.input.addEventListener('blur', () => document.body.classList.remove('keyboard-open'));
+}
+
+// Init
+init();
+
+</script>
+</body>
+</html>

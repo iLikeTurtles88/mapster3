@@ -2,20 +2,31 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Worldle Arcade - Globe 3D</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="description" content="Worldle Arcade 3D - Le défi géographique ultime. Explorez le globe, trouvez les pays et battez le chrono !">
+<meta name="theme-color" content="#02040a">
+<meta property="og:title" content="Worldle Arcade 3D">
+<meta property="og:description" content="Testez vos connaissances géographiques sur un globe 3D interactif.">
+<meta property="og:image" content="https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg">
+
+<title>Worldle Arcade 3D - Edition Finale</title>
     
+<!-- Fonts & Icons -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;900&display=swap" rel="stylesheet">
 
+<!-- Libraries -->
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
 <script src="//unpkg.com/globe.gl"></script>
 
 <style>
     :root {
-        --primary: #4cc9f0; --accent: #f72585; --success: #4cc9f0; --warning: #f48c06;
-        --bg-glass: rgba(15, 23, 42, 0.75);
+        --primary: #4cc9f0; 
+        --accent: #f72585; 
+        --success: #4cc9f0; 
+        --warning: #f48c06;
+        --bg-glass: rgba(15, 23, 42, 0.8);
         --border-glass: 1px solid rgba(255, 255, 255, 0.15);
         --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
         --font-main: 'Outfit', sans-serif;
@@ -27,18 +38,31 @@
         font-family: var(--font-main);
         background-color: #02040a; color: white;
         margin: 0; overflow: hidden; height: 100vh; width: 100vw;
+        position: fixed; /* Prevent rubber-banding on mobile */
     }
 
-    /* --- GLOBE CONTAINER --- */
+    /* --- LOADING SCREEN --- */
+    #loader-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: #02040a; z-index: 9999; display: flex; flex-direction: column;
+        justify-content: center; align-items: center; transition: opacity 0.5s;
+    }
+    .spinner {
+        width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.1);
+        border-top-color: var(--primary); border-radius: 50%;
+        animation: spin 1s linear infinite; margin-bottom: 20px;
+    }
+    .loading-text { font-weight: 600; letter-spacing: 2px; text-transform: uppercase; font-size: 0.9em; animation: pulse 1.5s infinite; }
+
+    /* --- SCENE --- */
     #scene-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; background: radial-gradient(circle at center, #1a1f35 0%, #02040a 100%); }
 
-    /* --- UI OVERLAYS --- */
+    /* --- UI LAYOUT --- */
     .hud-layer {
         position: absolute; z-index: 10; pointer-events: none;
         width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between;
-        padding: 20px;
+        padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom)) 20px;
     }
-    
     .interactive { pointer-events: auto; }
 
     /* TOP BAR */
@@ -46,167 +70,215 @@
     
     .player-stats {
         background: var(--bg-glass); backdrop-filter: blur(12px);
-        padding: 10px 20px; border-radius: 16px; border: var(--border-glass);
-        box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 5px;
+        padding: 12px 20px; border-radius: 18px; border: var(--border-glass);
+        box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px;
+        min-width: 160px;
     }
-    .level-badge { font-size: 0.8em; color: #aaa; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; }
-    .xp-bar-container { width: 150px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; margin-top: 5px; }
+    .level-badge { font-size: 0.75em; color: #cbd5e1; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; }
+    .xp-bar-container { width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; margin-top: 2px; }
     .xp-bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); width: 0%; transition: width 0.5s ease; }
-    .score-text { font-size: 1.4em; font-weight: 800; }
-
-    .timer-badge { 
-        font-family: monospace; font-size: 1.2em; color: var(--warning); 
-        text-align: right; font-weight: 700; margin-left: 10px;
-    }
-    .penalty-flash { animation: flashRed 0.5s; color: var(--accent); }
-
-    .top-right-actions { display: flex; gap: 10px; align-items: center; }
+    .score-row { display: flex; justify-content: space-between; align-items: flex-end; }
+    .score-text { font-size: 1.6em; font-weight: 900; line-height: 1; }
     
+    .timer-badge { 
+        font-family: monospace; font-size: 1.2em; color: #fff; 
+        text-align: right; font-weight: 700; transition: color 0.2s;
+    }
+    .timer-badge.running { color: var(--warning); }
+    .penalty-flash { animation: flashRed 0.5s; color: var(--accent) !important; }
+
+    .top-right-actions { display: flex; gap: 12px; align-items: center; }
+
     .combo-container {
         text-align: right; opacity: 0; transform: scale(0.8); transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        margin-right: 15px;
     }
     .combo-container.active { opacity: 1; transform: scale(1); }
-    .combo-val { font-size: 2.5em; font-weight: 900; color: var(--accent); text-shadow: 0 0 20px var(--accent); line-height: 1; }
-    .combo-label { font-size: 0.8em; font-weight: 700; color: white; text-transform: uppercase; letter-spacing: 2px; }
+    .combo-val { font-size: 2.2em; font-weight: 900; color: var(--accent); text-shadow: 0 0 20px rgba(247, 37, 133, 0.5); line-height: 1; }
+    .combo-label { font-size: 0.7em; font-weight: 700; color: white; text-transform: uppercase; letter-spacing: 2px; }
 
-    /* BOTTOM BAR (Input) */
+    .btn-icon {
+        width: 44px; height: 44px; border-radius: 14px; border: var(--border-glass);
+        background: var(--bg-glass); color: white; cursor: pointer;
+        display: flex; justify-content: center; align-items: center; font-size: 1.2em;
+        backdrop-filter: blur(5px); transition: all 0.2s;
+    }
+    .btn-icon:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
+    .btn-icon:active { transform: scale(0.95); }
+
+    /* BOTTOM BAR */
     .bottom-bar {
         display: flex; flex-direction: column; align-items: center; gap: 15px;
-        margin-bottom: 20px; transition: transform 0.3s;
+        margin-bottom: 10px; transition: transform 0.3s;
     }
     
     .game-input-wrapper {
         position: relative; width: 100%; max-width: 500px;
         background: var(--bg-glass); backdrop-filter: blur(16px);
-        border-radius: 20px; padding: 8px; border: var(--border-glass);
-        box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        border-radius: 20px; padding: 8px 8px 8px 20px; border: var(--border-glass);
+        box-shadow: 0 10px 40px rgba(0,0,0,0.6);
         display: flex; gap: 10px; transition: transform 0.2s;
     }
+    .game-input-wrapper:focus-within { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(76, 201, 240, 0.3); }
     
     #country-input {
         flex: 1; background: transparent; border: none; color: white;
-        font-family: var(--font-main); font-size: 1.1em; padding: 10px 15px;
-        outline: none;
+        font-family: var(--font-main); font-size: 1.1em; font-weight: 500;
+        outline: none; padding: 10px 0;
     }
     #country-input::placeholder { color: rgba(255,255,255,0.4); }
     
-    .action-btn {
-        background: rgba(255,255,255,0.1); border: none; color: white;
-        width: 45px; height: 45px; border-radius: 14px; cursor: pointer;
-        display: flex; justify-content: center; align-items: center; font-size: 1.2em;
-        transition: all 0.2s;
+    .input-actions { display: flex; gap: 5px; }
+    .btn-action {
+        width: 45px; height: 45px; border-radius: 14px; border: none; cursor: pointer;
+        font-size: 1.2em; display: flex; justify-content: center; align-items: center;
+        transition: transform 0.2s;
     }
-    .action-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
-    .action-btn.hint { color: var(--warning); }
-    .action-btn.menu-btn { color: var(--primary); }
-
-    /* --- SIDE PANEL (LIST) --- */
+    .btn-action:hover { transform: scale(1.05); }
+    .btn-action:active { transform: scale(0.95); }
+    .btn-hint { background: rgba(244, 140, 6, 0.2); color: var(--warning); }
+    .btn-hint:hover { background: rgba(244, 140, 6, 0.4); }
+    
+    /* SIDE PANEL */
     .side-panel {
         position: fixed; top: 0; right: 0; height: 100%; width: 320px;
-        background: rgba(10, 15, 30, 0.95); backdrop-filter: blur(20px);
-        border-left: var(--border-glass); box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+        background: rgba(10, 15, 30, 0.98); backdrop-filter: blur(30px);
+        border-left: var(--border-glass); box-shadow: -10px 0 50px rgba(0,0,0,0.8);
         z-index: 50; transform: translateX(105%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        padding: 20px; display: flex; flex-direction: column;
+        padding: max(20px, env(safe-area-inset-top)) 20px 20px 20px; 
+        display: flex; flex-direction: column;
     }
     .side-panel.open { transform: translateX(0); }
     
-    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
     .panel-title { font-size: 1.2em; font-weight: 700; color: var(--primary); }
-    .close-btn { background: none; border: none; color: white; font-size: 1.5em; cursor: pointer; }
+    .close-btn { background: none; border: none; color: white; font-size: 1.8em; cursor: pointer; padding: 5px; }
     
-    .list-container { overflow-y: auto; flex: 1; }
+    .list-container { overflow-y: auto; flex: 1; padding-right: 5px; }
+    .list-container::-webkit-scrollbar { width: 4px; }
+    .list-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+    
     .list-item {
-        display: flex; align-items: center; gap: 10px; padding: 10px;
-        background: rgba(255,255,255,0.05); margin-bottom: 8px; border-radius: 8px;
-        cursor: pointer; transition: background 0.2s; border: 1px solid transparent;
+        display: flex; align-items: center; gap: 15px; padding: 12px;
+        background: rgba(255,255,255,0.03); margin-bottom: 8px; border-radius: 10px;
+        cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
     }
-    .list-item:hover { background: rgba(255,255,255,0.1); border-color: var(--primary); }
-    .list-flag { width: 30px; height: auto; border-radius: 4px; object-fit: cover; }
+    .list-item:hover { background: rgba(255,255,255,0.08); border-color: var(--primary); transform: translateX(-2px); }
+    .list-flag { width: 32px; height: 24px; border-radius: 4px; object-fit: cover; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
     .list-name { font-size: 0.95em; font-weight: 600; }
 
+    /* PROMPT (CLICK MODE) */
     #target-prompt {
-        text-align: center; background: var(--bg-glass); padding: 10px 20px;
-        border-radius: 12px; backdrop-filter: blur(10px); border: var(--border-glass);
-        animation: slideUp 0.5s ease;
+        text-align: center; background: var(--bg-glass); padding: 12px 25px;
+        border-radius: 50px; backdrop-filter: blur(10px); border: var(--border-glass);
+        animation: slideUp 0.5s ease; box-shadow: var(--shadow);
     }
-    #target-prompt strong { color: var(--primary); font-size: 1.2em; }
+    #target-prompt strong { color: var(--primary); font-size: 1.2em; font-weight: 800; }
 
-    /* --- FLOATING TEXT --- */
+    /* FLOATING TEXT */
     .floater {
-        position: absolute; font-weight: 800; font-size: 1.5em;
+        position: absolute; font-weight: 900; font-size: 1.8em;
         color: var(--success); pointer-events: none; z-index: 20;
-        text-shadow: 0 2px 10px rgba(0,0,0,0.5);
-        animation: floatUp 1.5s forwards ease-out;
+        text-shadow: 0 2px 15px rgba(0,0,0,0.8);
+        animation: floatUp 1.2s forwards ease-out;
     }
 
-    /* --- MODALS --- */
+    /* MODALS */
     .modal-backdrop {
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.85); backdrop-filter: blur(10px);
+        background: rgba(2, 4, 10, 0.85); backdrop-filter: blur(15px);
         z-index: 100; display: flex; justify-content: center; align-items: center;
         opacity: 0; pointer-events: none; transition: opacity 0.3s;
     }
     .modal-backdrop.visible { opacity: 1; pointer-events: auto; }
     
     .game-card {
-        background: #1e293b; width: 90%; max-width: 400px;
+        background: #1e293b; width: 90%; max-width: 420px;
         border-radius: 24px; padding: 30px; text-align: center;
         border: 1px solid rgba(255,255,255,0.1);
-        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        box-shadow: 0 20px 60px rgba(0,0,0,0.6);
         transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        position: relative; overflow: hidden;
     }
     .modal-backdrop.visible .game-card { transform: scale(1); }
 
-    h2 { margin: 0 0 10px 0; font-size: 2em; background: linear-gradient(45deg, #4cc9f0, #4361ee); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    /* CARD DECORATION */
+    .game-card::before {
+        content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 5px;
+        background: linear-gradient(90deg, var(--primary), var(--accent));
+    }
+
+    h2 { margin: 0 0 10px 0; font-size: 2.2em; background: linear-gradient(45deg, #fff, #cbd5e1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -1px; }
+    .subtitle { color: #94a3b8; margin-bottom: 25px; font-size: 0.95em; line-height: 1.5; }
     
     .btn-main {
-        background: linear-gradient(45deg, #4361ee, #4cc9f0);
+        background: linear-gradient(135deg, #4361ee, #4cc9f0);
         border: none; width: 100%; padding: 16px; border-radius: 14px;
-        color: white; font-weight: 700; font-size: 1.1em; cursor: pointer;
-        margin-top: 20px; box-shadow: 0 10px 20px -5px rgba(67, 97, 238, 0.4);
-        transition: transform 0.2s, box-shadow 0.2s;
+        color: white; font-weight: 800; font-size: 1.1em; cursor: pointer;
+        margin-top: 20px; box-shadow: 0 8px 20px -5px rgba(67, 97, 238, 0.5);
+        transition: transform 0.2s, box-shadow 0.2s; text-transform: uppercase; letter-spacing: 1px;
     }
-    .btn-main:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -5px rgba(67, 97, 238, 0.5); }
-    .btn-main:disabled { opacity: 0.6; cursor: wait; }
+    .btn-main:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 12px 25px -5px rgba(67, 97, 238, 0.6); }
+    .btn-main:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
+    .btn-secondary { background: rgba(255,255,255,0.1); margin-top: 10px; color: #cbd5e1; font-weight: 600; }
+    .btn-secondary:hover { background: rgba(255,255,255,0.15); color: white; }
 
-    /* HINT MODAL STYLES */
+    /* FORM ELEMENTS */
+    .settings-grid { display: grid; grid-template-columns: 1fr; gap: 15px; text-align: left; margin: 20px 0; }
+    label { font-size: 0.8em; color: #94a3b8; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; display: block; }
+    select { 
+        width: 100%; padding: 14px; background: #0f172a; border: 1px solid #334155; 
+        color: white; border-radius: 12px; font-family: var(--font-main); outline: none;
+        font-size: 1em; cursor: pointer; transition: border-color 0.2s;
+    }
+    select:focus { border-color: var(--primary); }
+
+    /* HINT MODAL */
     .hint-grid { display: grid; gap: 10px; margin: 20px 0; }
     .hint-option {
-        background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-        padding: 15px; border-radius: 12px; cursor: pointer; transition: all 0.2s;
+        background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);
+        padding: 16px; border-radius: 14px; cursor: pointer; transition: all 0.2s;
         display: flex; justify-content: space-between; align-items: center;
     }
-    .hint-option:hover { background: rgba(255,255,255,0.1); border-color: var(--warning); }
-    .hint-cost { color: var(--accent); font-weight: 700; font-size: 0.9em; }
+    .hint-option:hover { background: rgba(255,255,255,0.08); border-color: var(--warning); transform: translateX(5px); }
+    .hint-cost { color: var(--accent); font-weight: 800; font-size: 0.9em; background: rgba(247, 37, 133, 0.1); padding: 4px 8px; border-radius: 6px; }
     
-    .hint-content-box {
-        background: rgba(0,0,0,0.3); padding: 20px; border-radius: 12px;
-        margin: 15px 0; border: 1px solid var(--primary);
-    }
-    .revealed-flag { width: 100px; height: auto; border-radius: 8px; margin-top: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+    .revealed-flag { width: 120px; height: auto; border-radius: 8px; margin-top: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
 
-    .settings-grid { display: grid; grid-template-columns: 1fr; gap: 15px; text-align: left; margin: 20px 0; }
-    label { font-size: 0.9em; color: #94a3b8; font-weight: 600; margin-bottom: 5px; display: block; }
-    select { width: 100%; padding: 12px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 10px; font-family: var(--font-main); outline: none; }
-
-    @keyframes floatUp { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-50px) scale(1.2); opacity: 0; } }
+    /* ANIMATIONS */
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    @keyframes floatUp { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-60px) scale(1.2); opacity: 0; } }
     @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    @keyframes flashRed { 0%, 100% { color: var(--warning); } 50% { color: var(--accent); } }
+    @keyframes flashRed { 0%, 100% { color: var(--warning); transform: scale(1); } 50% { color: var(--accent); transform: scale(1.2); } }
+    .shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+    @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
 
+    /* RESPONSIVE */
     @media (max-width: 600px) {
-        .player-stats { padding: 8px 15px; }
-        .score-text { font-size: 1.1em; }
-        .game-input-wrapper { width: 95%; }
+        .player-stats { min-width: auto; padding: 10px 15px; }
+        .score-text { font-size: 1.3em; }
+        .timer-badge { font-size: 1em; }
         .side-panel { width: 85%; }
+        .game-card { width: 95%; padding: 20px; }
+        
+        /* Handle keyboard push on mobile */
         body.keyboard-open .top-bar { opacity: 0; pointer-events: none; }
+        body.keyboard-open #globe-viz { height: 40vh; }
     }
 </style>
 </head>
 <body>
 
+<!-- LOADING SCREEN -->
+<div id="loader-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Préparation du Globe...</div>
+</div>
+
+<!-- 3D SCENE -->
 <div id="scene-container"><div id="globe-viz"></div></div>
 
+<!-- HUD -->
 <div class="hud-layer">
     <!-- Top Stats -->
     <div class="top-bar">
@@ -216,7 +288,9 @@
                 <span id="timer-val" class="timer-badge">00:00</span>
             </div>
             <div class="xp-bar-container"><div class="xp-bar-fill" id="xp-bar"></div></div>
-            <div class="score-text"><span id="score-current">0</span> / <span id="score-total">0</span></div>
+            <div class="score-row">
+                <span class="score-text"><span id="score-current">0</span>/<span id="score-total">0</span></span>
+            </div>
         </div>
         
         <div class="top-right-actions interactive">
@@ -224,8 +298,9 @@
                 <div class="combo-val" id="combo-display">x1</div>
                 <div class="combo-label">Combo 🔥</div>
             </div>
-            <button class="action-btn menu-btn" id="btn-toggle-list" title="Liste des pays">📋</button>
-            <button class="action-btn giveup" id="btn-reset" title="Menu">🏠</button>
+            <button class="btn-icon" id="btn-sound" title="Son On/Off">🔊</button>
+            <button class="btn-icon" id="btn-toggle-list" title="Liste des pays">📋</button>
+            <button class="btn-icon" id="btn-reset" title="Menu Principal">🏠</button>
         </div>
     </div>
 
@@ -236,8 +311,10 @@
         </div>
         
         <div class="game-input-wrapper" id="input-container">
-            <input type="text" id="country-input" placeholder="Nom du pays..." autocomplete="off" spellcheck="false">
-            <button class="action-btn hint" id="btn-hint" title="Indices">💡</button>
+            <input type="text" id="country-input" placeholder="Entrez le nom du pays..." autocomplete="off" spellcheck="false">
+            <div class="input-actions">
+                <button class="btn-action btn-hint" id="btn-hint" title="Acheter un Indice">💡</button>
+            </div>
         </div>
     </div>
 </div>
@@ -245,11 +322,11 @@
 <!-- SIDE PANEL (LISTE) -->
 <div class="side-panel interactive" id="side-panel">
     <div class="panel-header">
-        <span class="panel-title">Pays Trouvés</span>
+        <span class="panel-title">Pays Découverts</span>
         <button class="close-btn" id="btn-close-list">×</button>
     </div>
     <div class="list-container" id="guessed-list">
-        <!-- Items générés par JS -->
+        <!-- JS Generated -->
     </div>
 </div>
 
@@ -257,7 +334,7 @@
 <div id="start-modal" class="modal-backdrop visible interactive">
     <div class="game-card">
         <h2>Worldle Arcade</h2>
-        <p style="color:#94a3b8; margin-bottom:20px;">Exploration & Vitesse. Le chrono démarre au premier pays trouvé !</p>
+        <p class="subtitle">Explorez le monde en 3D. Trouvez les pays, gérez votre temps et devenez une légende.</p>
         
         <div class="settings-grid">
             <div>
@@ -272,7 +349,7 @@
                 </select>
             </div>
             <div>
-                <label>Mode</label>
+                <label>Mode de Jeu</label>
                 <select id="opt-mode">
                     <option value="type">Saisie (Clavier) ⌨️</option>
                     <option value="click">Localisation (Clic) 🖱️</option>
@@ -284,39 +361,39 @@
     </div>
 </div>
 
-<!-- HINT SELECTION MODAL -->
+<!-- HINT MODAL -->
 <div id="hint-modal" class="modal-backdrop interactive">
     <div class="game-card">
         <h2>Centre d'Indices</h2>
-        <p style="color:#94a3b8;">Révéler des infos sur un pays <strong style="color:white">non trouvé</strong>.</p>
+        <p class="subtitle">Révéler une info sur un pays <strong>non trouvé</strong> (Pénalité de temps).</p>
         
         <div class="hint-grid">
-            <div class="hint-option" onclick="app.revealHint('capital')">
+            <div class="hint-option" onclick="game.revealHint('capital')">
                 <span>🏙️ Capitale</span>
                 <span class="hint-cost">+20s</span>
             </div>
-            <div class="hint-option" onclick="app.revealHint('flag')">
+            <div class="hint-option" onclick="game.revealHint('flag')">
                 <span>🏳️ Drapeau</span>
                 <span class="hint-cost">+20s</span>
             </div>
-            <div class="hint-option" onclick="app.revealHint('both')">
+            <div class="hint-option" onclick="game.revealHint('both')">
                 <span>✨ Les Deux</span>
                 <span class="hint-cost">+40s</span>
             </div>
         </div>
         
-        <button onclick="document.getElementById('hint-modal').classList.remove('visible')" class="btn-main" style="background:#334155; margin-top:0;">Annuler</button>
+        <button onclick="document.getElementById('hint-modal').classList.remove('visible')" class="btn-main btn-secondary">Annuler</button>
     </div>
 </div>
 
-<!-- HINT REVEAL MODAL -->
+<!-- REVEAL MODAL -->
 <div id="hint-reveal-modal" class="modal-backdrop interactive">
     <div class="game-card">
-        <h2 style="font-size:1.5em; color:var(--warning);">Renseignement</h2>
-        <p>Indice pour un pays mystère :</p>
+        <h2 style="color:var(--warning); -webkit-text-fill-color: var(--warning);">Renseignement</h2>
+        <p class="subtitle" style="margin-bottom:10px">Voici vos informations :</p>
         
-        <div class="hint-content-box" id="hint-content">
-            <!-- Contenu injecté -->
+        <div id="hint-content" style="background:rgba(255,255,255,0.05); padding:20px; border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
+            <!-- Content -->
         </div>
         
         <button onclick="document.getElementById('hint-reveal-modal').classList.remove('visible')" class="btn-main">Compris !</button>
@@ -327,79 +404,131 @@
 <div id="end-modal" class="modal-backdrop interactive">
     <div class="game-card">
         <h2 id="end-title">Victoire !</h2>
-        <div style="font-size:3em; margin:10px 0;">🏆</div>
-        <p id="end-msg" style="color:white; font-size:1.2em;">Score: 100%</p>
-        <p id="end-time-final" style="color:var(--warning); font-weight:bold; font-size:1.2em;"></p>
-        <p style="color:#94a3b8; font-size:0.9em;">XP Gagnée : <span id="end-xp" style="color:var(--success)">+0</span></p>
+        <div style="font-size:4em; margin:10px 0;">🏆</div>
+        <p id="end-msg" style="font-size:1.2em; font-weight:bold;">Tous les pays trouvés !</p>
+        
+        <div style="margin: 20px 0; background:rgba(255,255,255,0.05); padding:15px; border-radius:12px;">
+            <div style="font-size:0.9em; color:#94a3b8;">Temps Final</div>
+            <div id="end-time-final" style="font-size:1.8em; font-weight:900; color:var(--warning); font-family:monospace;">00:00</div>
+            <div style="font-size:0.9em; color:#94a3b8; margin-top:5px;">XP Gagnée: <span id="end-xp" style="color:var(--success)">+0</span></div>
+        </div>
+
+        <button id="btn-share" class="btn-main" style="background:#334155; margin-bottom:10px;">Partager Score 📋</button>
         <button id="btn-replay" class="btn-main">Rejouer</button>
     </div>
 </div>
 
 <script>
-// --- DATA SOURCE ---
+/**
+ * WORLDLE ARCADE 3D - FINAL PRODUCTION BUILD
+ * Optimized, Cleaned, and Ready for Deployment.
+ */
+
+// --- CONFIGURATION ---
 const API_GEO = 'https://cdn.jsdelivr.net/gh/johan/world.geo.json@master/countries.geo.json';
 const API_META = 'https://restcountries.com/v3.1/all?fields=cca3,name,translations,capital,region,latlng,population,flags';
 
-// --- STATE MANAGEMENT ---
+// --- STATE ---
 const state = {
-    countries: [],
-    game: { active: false, mode: 'type', region: 'World', found: new Set(), target: null, timer: 0, timerRunning: false },
-    stats: { xp: 0, level: 1, combo: 1, lastGuessTime: 0 },
-    intervals: { timer: null }
+    data: [],
+    activeGame: { 
+        running: false, 
+        region: 'World', 
+        mode: 'type', 
+        subset: [], 
+        found: new Set(), 
+        target: null, 
+        timer: 0, 
+        timerActive: false 
+    },
+    stats: { xp: 0, level: 1, combo: 1, lastGuess: 0 },
+    settings: { sound: true },
+    interval: null
 };
 
+// --- DOM ELEMENTS ---
+const $ = (id) => document.getElementById(id);
 const els = {
-    globe: document.getElementById('globe-viz'),
-    input: document.getElementById('country-input'),
-    score: document.getElementById('score-current'),
-    total: document.getElementById('score-total'),
-    timer: document.getElementById('timer-val'),
-    xpBar: document.getElementById('xp-bar'),
-    lvl: document.getElementById('level-val'),
-    combo: document.getElementById('combo-box'),
-    comboVal: document.getElementById('combo-display'),
-    prompt: document.getElementById('target-prompt'),
-    targetName: document.getElementById('target-name'),
-    modals: { 
-        start: document.getElementById('start-modal'), 
-        end: document.getElementById('end-modal'),
-        hint: document.getElementById('hint-modal'),
-        reveal: document.getElementById('hint-reveal-modal')
-    },
-    hintContent: document.getElementById('hint-content'),
-    btns: { start: document.getElementById('btn-start'), replay: document.getElementById('btn-replay'), hint: document.getElementById('btn-hint'), reset: document.getElementById('btn-reset'), list: document.getElementById('btn-toggle-list'), closeList: document.getElementById('btn-close-list') },
-    panel: document.getElementById('side-panel'),
-    list: document.getElementById('guessed-list')
+    loader: $('loader-overlay'),
+    globe: $('globe-viz'),
+    input: $('country-input'),
+    score: $('score-current'),
+    total: $('score-total'),
+    timer: $('timer-val'),
+    xpBar: $('xp-bar'),
+    level: $('level-val'),
+    combo: { box: $('combo-box'), val: $('combo-display') },
+    prompt: { box: $('target-prompt'), name: $('target-name') },
+    modals: { start: $('start-modal'), end: $('end-modal'), hint: $('hint-modal'), reveal: $('hint-reveal-modal') },
+    panels: { list: $('side-panel'), listContent: $('guessed-list') },
+    btns: { start: $('btn-start'), replay: $('btn-replay'), reset: $('btn-reset'), list: $('btn-toggle-list'), closeList: $('btn-close-list'), hint: $('btn-hint'), sound: $('btn-sound'), share: $('btn-share') },
+    hintContent: $('hint-content')
 };
 
 let globe, audioCtx;
 
-// --- AUDIO ENGINE ---
-function initAudio() { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-function playSound(type) {
-    if (!audioCtx) initAudio();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    const t = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain); gain.connect(audioCtx.destination);
+// --- AUDIO MANAGER ---
+const AudioMgr = {
+    init: () => { 
+        if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); 
+    },
+    resume: () => {
+        if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    },
+    play: (type) => {
+        if (!state.settings.sound) return;
+        AudioMgr.init(); AudioMgr.resume();
+        const t = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
 
-    if (type === 'correct') { playTone(440, 'sine', 0.1); playTone(554.37, 'sine', 0.15); playTone(659.25, 'sine', 0.2); } 
-    else if (type === 'wrong') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, t); osc.frequency.linearRampToValueAtTime(50, t+0.3); gain.gain.setValueAtTime(0.1, t); gain.gain.exponentialRampToValueAtTime(0.01, t+0.3); osc.start(t); osc.stop(t+0.3); } 
-    else if (type === 'levelup') { playTone(440, 'square', 0, 0.4); playTone(880, 'square', 0.1, 0.4); playTone(1760, 'square', 0.2, 0.6); }
-    else if (type === 'penalty') { osc.type = 'triangle'; osc.frequency.setValueAtTime(200, t); osc.frequency.linearRampToValueAtTime(100, t+0.5); gain.gain.setValueAtTime(0.2, t); gain.gain.linearRampToValueAtTime(0, t+0.5); osc.start(t); osc.stop(t+0.5); }
+        if (type === 'correct') {
+            // Accord Majeur satisfaisant
+            playTone(440, 'sine', 0, 0.1); playTone(554.37, 'sine', 0.05, 0.15); playTone(659.25, 'sine', 0.1, 0.2);
+        } else if (type === 'wrong') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, t); osc.frequency.linearRampToValueAtTime(50, t+0.3);
+            gain.gain.setValueAtTime(0.1, t); gain.gain.exponentialRampToValueAtTime(0.01, t+0.3);
+            osc.start(t); osc.stop(t+0.3);
+        } else if (type === 'levelup') {
+            playTone(440, 'square', 0, 0.4); playTone(880, 'square', 0.1, 0.4); playTone(1760, 'square', 0.2, 0.6);
+        } else if (type === 'penalty') {
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(200, t); osc.frequency.linearRampToValueAtTime(100, t+0.5);
+            gain.gain.setValueAtTime(0.2, t); gain.gain.linearRampToValueAtTime(0, t+0.5);
+            osc.start(t); osc.stop(t+0.5);
+        }
+    },
+    toggle: () => {
+        state.settings.sound = !state.settings.sound;
+        els.btns.sound.innerText = state.settings.sound ? "🔊" : "🔇";
+        els.btns.sound.style.opacity = state.settings.sound ? 1 : 0.5;
+    }
+};
+
+function playTone(f, type, delay, dur) {
+    const osc = audioCtx.createOscillator(); const g = audioCtx.createGain();
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.type = type; osc.frequency.value = f;
+    const t = audioCtx.currentTime + delay;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.1, t+0.05); g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    osc.start(t); osc.stop(t+dur);
 }
-function playTone(f,T,d,dur=0.3) { const o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.type=T; o.frequency.value=f; const t=audioCtx.currentTime+d; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.1,t+0.05); g.gain.exponentialRampToValueAtTime(0.001,t+dur); o.start(t); o.stop(t+dur); }
 
-// --- GLOBE SETUP ---
-async function init() {
+// --- INITIALIZATION ---
+async function initApp() {
     try {
-        const [geo, meta] = await Promise.all([
-            fetch(API_GEO).then(r => r.json()),
-            fetch(API_META).then(r => r.json())
+        // Fetch Data
+        const [geoRes, metaRes] = await Promise.all([
+            fetch(API_GEO), fetch(API_META)
         ]);
 
-        state.countries = geo.features.map(f => {
+        if(!geoRes.ok || !metaRes.ok) throw new Error("API Error");
+
+        const geo = await geoRes.json();
+        const meta = await metaRes.json();
+
+        // Merge Data
+        state.data = geo.features.map(f => {
             const m = meta.find(c => c.cca3 === f.id);
             if (!m) return null;
             return {
@@ -414,31 +543,41 @@ async function init() {
             };
         }).filter(x => x);
 
-        setupGlobe();
-        loadProgress();
-        els.btns.start.textContent = "Lancer la partie";
+        loadSave();
+        initGlobe();
+        
+        // Ready
+        els.loader.style.opacity = 0;
+        setTimeout(() => els.loader.style.display = 'none', 500);
+        els.btns.start.textContent = "Lancer l'Aventure";
         els.btns.start.disabled = false;
 
-    } catch (e) { console.error(e); alert("Erreur chargement."); }
+    } catch (e) {
+        console.error(e);
+        els.loader.innerHTML = "<div style='color:red; text-align:center'>Erreur de chargement.<br>Veuillez rafraîchir la page.</div>";
+    }
 }
 
-function setupGlobe() {
+function initGlobe() {
     globe = Globe()
-        .backgroundColor('rgba(0,0,0,0)') 
+        .backgroundColor('rgba(0,0,0,0)')
         .showAtmosphere(true)
         .atmosphereColor('#4cc9f0')
         .atmosphereAltitude(0.15)
         .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
         .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
-        .polygonsData(state.countries.map(c => ({ ...c.geo, data: c })))
+        .polygonsData(state.data.map(c => ({ ...c.geo, data: c })))
+        
+        // Z-Fighting Fix & Visuals
         .polygonAltitude(0.01)
         .polygonSideColor(() => 'rgba(0,0,0,0)')
-        .polygonStrokeColor(() => 'rgba(255, 255, 255, 0.4)')
+        .polygonStrokeColor(() => 'rgba(255, 255, 255, 0.2)')
         .polygonCapColor(() => 'rgba(30, 41, 59, 0.6)')
-        .onPolygonClick(handleMapClick)
+        
+        .onPolygonClick(handleInput.click)
         .onPolygonHover(d => els.globe.style.cursor = d ? 'pointer' : 'grab')
         .polygonLabel(({ data }) => `
-            <div style="background:rgba(15,23,42,0.9); color:white; padding:5px 10px; border-radius:6px; font-family:sans-serif; border:1px solid rgba(255,255,255,0.2);">
+            <div style="background:rgba(15,23,42,0.9); color:white; padding:6px 10px; border-radius:6px; font-family:sans-serif; border:1px solid rgba(255,255,255,0.2); font-size:14px;">
                 ${data.fr}
             </div>
         `)
@@ -447,243 +586,316 @@ function setupGlobe() {
     globe.controls().autoRotate = true;
     globe.controls().autoRotateSpeed = 0.5;
     globe.pointOfView({ altitude: 2.5 });
-}
-
-// --- TIMER LOGIC ---
-function startTimer() {
-    if (state.game.timerRunning) return;
-    state.game.timerRunning = true;
-    state.intervals.timer = setInterval(() => {
-        state.game.timer++;
-        renderTimer();
-    }, 1000);
-}
-
-function stopTimer() {
-    state.game.timerRunning = false;
-    clearInterval(state.intervals.timer);
-}
-
-function addPenalty(seconds) {
-    state.game.timer += seconds;
-    renderTimer();
-    playSound('penalty');
-    els.timer.classList.add('penalty-flash');
-    setTimeout(() => els.timer.classList.remove('penalty-flash'), 500);
-}
-
-function renderTimer() {
-    const m = Math.floor(state.game.timer / 60).toString().padStart(2, '0');
-    const s = (state.game.timer % 60).toString().padStart(2, '0');
-    els.timer.innerText = `${m}:${s}`;
-}
-
-// --- GAME LOGIC ---
-function startGame() {
-    const region = document.getElementById('opt-region').value;
-    const mode = document.getElementById('opt-mode').value;
     
-    state.game.active = true;
-    state.game.region = region;
-    state.game.mode = mode;
-    state.game.found.clear();
-    state.game.dataset = region === 'World' ? state.countries : state.countries.filter(c => c.region === region);
-    state.game.target = null;
-    
-    // Reset Timer
-    state.game.timer = 0;
-    state.game.timerRunning = false;
-    clearInterval(state.intervals.timer);
-    renderTimer();
-
-    state.stats.combo = 1;
-    els.score.innerText = 0;
-    els.total.innerText = state.game.dataset.length;
-    els.combo.classList.remove('active');
-    els.list.innerHTML = ''; 
-
-    els.modals.start.classList.remove('visible');
-    els.input.value = '';
-    
-    if (mode === 'click') {
-        els.input.parentElement.style.display = 'none';
-        els.prompt.classList.remove('hidden');
-        nextTarget();
-    } else {
-        els.input.parentElement.style.display = 'flex';
-        els.prompt.classList.add('hidden');
-        els.input.focus();
-        globe.polygonLabel(null); 
-    }
-
-    globe.controls().autoRotate = false;
-    updateGlobeVisuals();
-    
-    if (state.game.dataset.length > 0) {
-        const first = state.game.dataset[0];
-        globe.pointOfView({ lat: first.coords.lat, lng: first.coords.lng, altitude: 2 }, 1000);
-    }
+    // Adjust to container
+    new ResizeObserver(() => {
+        globe.width(els.globe.clientWidth);
+        globe.height(els.globe.clientHeight);
+    }).observe($('scene-container'));
 }
 
-function checkInput() {
-    if (!state.game.active || state.game.mode !== 'type') return;
-    const val = normalize(els.input.value);
-    const match = state.game.dataset.find(c => !state.game.found.has(c.id) && normalize(c.fr) === val);
+// --- CORE GAME LOGIC ---
+const game = {
+    start: () => {
+        const r = $('opt-region').value;
+        const m = $('opt-mode').value;
+        
+        // Setup Game State
+        state.activeGame = {
+            running: true,
+            region: r,
+            mode: m,
+            subset: r === 'World' ? state.data : state.data.filter(c => c.region === r),
+            found: new Set(),
+            target: null,
+            timer: 0,
+            timerActive: false
+        };
 
-    if (match) {
-        success(match);
+        if(state.activeGame.subset.length === 0) {
+            alert("Aucun pays dans cette région (Erreur données)");
+            return;
+        }
+
+        // Reset UI
+        state.stats.combo = 1;
+        els.score.innerText = 0;
+        els.total.innerText = state.activeGame.subset.length;
+        els.timer.innerText = "00:00";
+        els.timer.classList.remove('running');
+        els.panels.listContent.innerHTML = '';
+        els.combo.box.classList.remove('active');
+        
+        // Close Modals
+        els.modals.start.classList.remove('visible');
+        els.modals.end.classList.remove('visible');
+        
+        // Mode Specifics
         els.input.value = '';
-    }
-}
+        if (m === 'click') {
+            $('input-container').style.display = 'none';
+            els.prompt.box.classList.remove('hidden');
+            game.nextTarget();
+        } else {
+            $('input-container').style.display = 'flex';
+            els.prompt.box.classList.add('hidden');
+            els.input.focus();
+            globe.polygonLabel(null); // Hide labels for hard mode
+        }
 
-function handleMapClick(polygon) {
-    if (!state.game.active) return;
-    const c = polygon.data;
-    if (state.game.mode === 'click') {
-        if (c.id === state.game.target.id) { success(c); nextTarget(); } else { fail(); }
-    }
-}
+        globe.controls().autoRotate = false;
+        
+        // Focus Camera
+        const first = state.activeGame.subset[0];
+        globe.pointOfView({ lat: first.coords.lat, lng: first.coords.lng, altitude: 2 }, 1000);
+        
+        game.updateVisuals();
+    },
 
-function success(country) {
-    // Start Timer on First Guess
-    if (state.game.found.size === 0) startTimer();
+    checkTimer: () => {
+        if(!state.activeGame.timerActive) {
+            state.activeGame.timerActive = true;
+            els.timer.classList.add('running');
+            state.interval = setInterval(() => {
+                state.activeGame.timer++;
+                game.renderTimer();
+            }, 1000);
+        }
+    },
 
-    state.game.found.add(country.id);
-    
-    const now = Date.now();
-    if (now - state.stats.lastGuessTime < 6000) state.stats.combo++;
-    else state.stats.combo = 1;
-    state.stats.lastGuessTime = now;
+    stop: () => {
+        state.activeGame.running = false;
+        state.activeGame.timerActive = false;
+        clearInterval(state.interval);
+        els.timer.classList.remove('running');
+    },
 
-    playSound('correct');
-    spawnConfetti();
-    showFloatingText(`+${10 * state.stats.combo} XP`, window.innerWidth/2, window.innerHeight/2);
-    gainXP(10 * state.stats.combo);
-    
-    els.score.innerText = state.game.found.size;
-    updateComboUI();
-    updateGlobeVisuals();
-    addToList(country);
+    renderTimer: () => {
+        const m = Math.floor(state.activeGame.timer / 60).toString().padStart(2, '0');
+        const s = (state.activeGame.timer % 60).toString().padStart(2, '0');
+        els.timer.innerText = `${m}:${s}`;
+    },
 
-    globe.pointOfView({ lat: country.coords.lat, lng: country.coords.lng, altitude: 1.5 }, 1000);
+    penalty: (sec) => {
+        game.checkTimer(); // Ensure timer starts if penalty taken before first guess
+        state.activeGame.timer += sec;
+        game.renderTimer();
+        AudioMgr.play('penalty');
+        els.timer.classList.add('penalty-flash');
+        setTimeout(() => els.timer.classList.remove('penalty-flash'), 500);
+    },
 
-    if (state.game.found.size === state.game.dataset.length) endGame();
-}
+    success: (country) => {
+        game.checkTimer(); // Start timer if first guess
+        state.activeGame.found.add(country.id);
 
-function fail() {
-    state.stats.combo = 1;
-    updateComboUI();
-    playSound('wrong');
-    document.body.classList.add('shake');
-    setTimeout(() => document.body.classList.remove('shake'), 400);
-}
+        // Combo Logic
+        const now = Date.now();
+        if (now - state.stats.lastGuess < 6000) state.stats.combo++;
+        else state.stats.combo = 1;
+        state.stats.lastGuess = now;
 
-function nextTarget() {
-    const left = state.game.dataset.filter(c => !state.game.found.has(c.id));
-    if (left.length === 0) return endGame();
-    state.game.target = left[Math.floor(Math.random() * left.length)];
-    els.targetName.innerText = state.game.target.fr;
-}
+        // Rewards
+        AudioMgr.play('correct');
+        confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#4cc9f0', '#f72585'] });
+        ui.floatText(`+${10 * state.stats.combo} XP`, window.innerWidth/2, window.innerHeight/2);
+        ui.gainXP(10 * state.stats.combo);
 
-function updateGlobeVisuals() {
-    globe.polygonCapColor(({ data }) => {
-        if (state.game.found.has(data.id)) return '#4cc9f0'; 
-        if (!state.game.active) return 'rgba(30, 41, 59, 0.6)';
-        if (state.game.dataset.find(c => c.id === data.id)) return 'rgba(255, 255, 255, 0.1)'; 
-        return 'rgba(30, 41, 59, 0.6)'; 
-    });
-    const d = globe.polygonsData(); globe.polygonsData([...d]);
-}
+        // Updates
+        els.score.innerText = state.activeGame.found.size;
+        ui.updateCombo();
+        game.updateVisuals();
+        ui.addToList(country);
 
-function addToList(country) {
-    const div = document.createElement('div'); div.className = 'list-item';
-    div.innerHTML = `<img src="${country.flag}" class="list-flag"><span class="list-name">${country.fr}</span>`;
-    div.onclick = () => { globe.pointOfView({ lat: country.coords.lat, lng: country.coords.lng, altitude: 1.2 }, 1000); if (window.innerWidth < 600) els.panel.classList.remove('open'); };
-    els.list.prepend(div);
-}
+        // Camera
+        globe.pointOfView({ lat: country.coords.lat, lng: country.coords.lng, altitude: 1.5 }, 1000);
 
-// --- HINT SYSTEM ---
-const app = {
+        // Win Condition
+        if (state.activeGame.found.size === state.activeGame.subset.length) game.win();
+    },
+
+    fail: () => {
+        state.stats.combo = 1;
+        ui.updateCombo();
+        AudioMgr.play('wrong');
+        document.body.classList.add('shake');
+        setTimeout(() => document.body.classList.remove('shake'), 400);
+    },
+
+    nextTarget: () => {
+        const remaining = state.activeGame.subset.filter(c => !state.activeGame.found.has(c.id));
+        if(remaining.length === 0) return game.win();
+        state.activeGame.target = remaining[Math.floor(Math.random() * remaining.length)];
+        els.prompt.name.innerText = state.activeGame.target.fr;
+    },
+
+    updateVisuals: () => {
+        globe.polygonCapColor(({ data }) => {
+            if (state.activeGame.found.has(data.id)) return '#4cc9f0'; // Neon Blue Found
+            if (!state.activeGame.running) return 'rgba(30, 41, 59, 0.6)';
+            
+            // Visually distinguish active region vs rest of world
+            if (state.activeGame.subset.find(c => c.id === data.id)) return 'rgba(255, 255, 255, 0.1)';
+            return 'rgba(30, 41, 59, 0.6)';
+        });
+        
+        const d = globe.polygonsData();
+        globe.polygonsData([...d]); // Force refresh
+    },
+
     revealHint: (type) => {
-        if (!state.game.active) return;
+        if (!state.activeGame.running) return;
         
-        // Find a country NOT found yet
-        const left = state.game.dataset.filter(c => !state.game.found.has(c.id));
-        if (left.length === 0) return;
-        
-        // Pick random target for hint
-        const target = state.game.mode === 'click' ? state.game.target : left[Math.floor(Math.random() * left.length)];
-        
-        let cost = 0;
+        const remaining = state.activeGame.subset.filter(c => !state.activeGame.found.has(c.id));
+        if (remaining.length === 0) return;
+
+        // Pick target: either current click target or random one
+        const target = state.activeGame.mode === 'click' 
+            ? state.activeGame.target 
+            : remaining[Math.floor(Math.random() * remaining.length)];
+
+        let cost = 20;
         let html = '';
 
         if (type === 'capital') {
-            cost = 20;
-            html = `<strong>🏙️ Capitale :</strong> <span style="color:#4cc9f0; font-size:1.2em;">${target.capital}</span>`;
+            html = `<strong>🏙️ Capitale :</strong> <span style="color:var(--primary); font-size:1.3em;">${target.capital}</span>`;
         } else if (type === 'flag') {
-            cost = 20;
             html = `<strong>🏳️ Drapeau :</strong><br><img src="${target.flag}" class="revealed-flag">`;
         } else {
             cost = 40;
             html = `<strong>🏙️ Capitale :</strong> ${target.capital}<br><strong>🏳️ Drapeau :</strong><br><img src="${target.flag}" class="revealed-flag">`;
         }
 
-        addPenalty(cost);
+        game.penalty(cost);
         
-        // Show Reveal Modal
         els.modals.hint.classList.remove('visible');
         els.hintContent.innerHTML = html;
         els.modals.reveal.classList.add('visible');
         
-        // If in Click mode, focus on it just in case
-        if (state.game.mode === 'click') {
-             globe.pointOfView({ lat: target.coords.lat, lng: target.coords.lng, altitude: 2 }, 1000);
+        // Help player locate the area
+        globe.pointOfView({ lat: target.coords.lat, lng: target.coords.lng, altitude: 2.2 }, 1200);
+    },
+
+    win: () => {
+        game.stop();
+        els.modals.end.classList.add('visible');
+        $('end-xp').innerText = `+${state.activeGame.found.size * 10}`;
+        $('end-time-final').innerText = els.timer.innerText;
+        globe.controls().autoRotate = true;
+    }
+};
+
+// --- INPUT HANDLING ---
+const handleInput = {
+    type: () => {
+        if (!state.activeGame.running || state.activeGame.mode !== 'type') return;
+        const val = normalize(els.input.value);
+        const match = state.activeGame.subset.find(c => 
+            !state.activeGame.found.has(c.id) && normalize(c.fr) === val
+        );
+
+        if (match) {
+            game.success(match);
+            els.input.value = '';
+        }
+    },
+    click: (polygon) => {
+        if (!state.activeGame.running) return;
+        const c = polygon.data;
+        if (state.activeGame.mode === 'click') {
+            if (c.id === state.activeGame.target.id) {
+                game.success(c);
+                game.nextTarget();
+            } else {
+                game.fail();
+            }
         }
     }
 };
 
-// --- GAMIFICATION ---
-function gainXP(amount) {
-    state.stats.xp += amount;
-    const xpNeeded = state.stats.level * 100;
-    if (state.stats.xp >= xpNeeded) { state.stats.level++; state.stats.xp -= xpNeeded; playSound('levelup'); showFloatingText("LEVEL UP!", window.innerWidth/2, window.innerHeight/3, 'var(--accent)'); }
-    saveProgress(); renderStats();
-}
-function renderStats() { els.lvl.innerText = state.stats.level; els.xpBar.style.width = `${(state.stats.xp / (state.stats.level * 100)) * 100}%`; }
-function updateComboUI() { if (state.stats.combo > 1) { els.combo.classList.add('active'); els.comboVal.innerText = `x${state.stats.combo}`; els.comboVal.style.transform = 'scale(1.5)'; setTimeout(() => els.comboVal.style.transform = 'scale(1)', 200); } else { els.combo.classList.remove('active'); } }
-function showFloatingText(text, x, y, color = null) { const el = document.createElement('div'); el.className = 'floater'; el.innerText = text; el.style.left = `${x}px`; el.style.top = `${y}px`; if(color) el.style.color = color; document.body.appendChild(el); setTimeout(() => el.remove(), 1500); }
+// --- UI HELPERS ---
+const ui = {
+    gainXP: (amount) => {
+        state.stats.xp += amount;
+        const needed = state.stats.level * 100;
+        if(state.stats.xp >= needed) {
+            state.stats.level++;
+            state.stats.xp -= needed;
+            AudioMgr.play('levelup');
+            ui.floatText("NIVEAU SUPÉRIEUR !", window.innerWidth/2, window.innerHeight/3, 'var(--accent)');
+        }
+        saveGame();
+        ui.renderStats();
+    },
+    renderStats: () => {
+        els.level.innerText = state.stats.level;
+        els.xpBar.style.width = `${(state.stats.xp / (state.stats.level * 100)) * 100}%`;
+    },
+    updateCombo: () => {
+        if (state.stats.combo > 1) {
+            els.combo.box.classList.add('active');
+            els.combo.val.innerText = `x${state.stats.combo}`;
+            els.combo.val.style.transform = 'scale(1.5)';
+            setTimeout(() => els.combo.val.style.transform = 'scale(1)', 200);
+        } else {
+            els.combo.box.classList.remove('active');
+        }
+    },
+    addToList: (c) => {
+        const div = document.createElement('div'); div.className = 'list-item';
+        div.innerHTML = `<img src="${c.flag}" class="list-flag" loading="lazy"><span class="list-name">${c.fr}</span>`;
+        div.onclick = () => { 
+            globe.pointOfView({ lat: c.coords.lat, lng: c.coords.lng, altitude: 1.2 }, 1000); 
+            if (window.innerWidth < 600) els.panels.list.classList.remove('open');
+        };
+        els.panels.listContent.prepend(div);
+    },
+    floatText: (text, x, y, color) => {
+        const el = document.createElement('div'); el.className = 'floater'; 
+        el.innerText = text; el.style.left = `${x}px`; el.style.top = `${y}px`;
+        if(color) el.style.color = color;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 1200);
+    }
+};
 
 // --- UTILS ---
-function saveProgress() { localStorage.setItem('worldle_arcade_xp', state.stats.xp); localStorage.setItem('worldle_arcade_lvl', state.stats.level); }
-function loadProgress() { state.stats.xp = parseInt(localStorage.getItem('worldle_arcade_xp')) || 0; state.stats.level = parseInt(localStorage.getItem('worldle_arcade_lvl')) || 1; renderStats(); }
 function normalize(s) { return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/-/g, " ").trim(); }
-function spawnConfetti() { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#4cc9f0', '#f72585'] }); }
-
-function endGame() {
-    stopTimer();
-    state.game.active = false;
-    els.modals.end.classList.add('visible');
-    document.getElementById('end-xp').innerText = `+${state.game.found.size * 10}`;
-    document.getElementById('end-time-final').innerText = `Temps final : ${els.timer.innerText}`;
-    globe.controls().autoRotate = true;
+function saveGame() { localStorage.setItem('wa_xp', state.stats.xp); localStorage.setItem('wa_lvl', state.stats.level); }
+function loadSave() { 
+    state.stats.xp = parseInt(localStorage.getItem('wa_xp')) || 0; 
+    state.stats.level = parseInt(localStorage.getItem('wa_lvl')) || 1; 
+    ui.renderStats(); 
 }
 
-// --- EVENTS ---
-els.input.addEventListener('input', checkInput);
-els.btns.start.addEventListener('click', startGame);
-els.btns.replay.addEventListener('click', () => { els.modals.end.classList.remove('visible'); els.modals.start.classList.add('visible'); });
-els.btns.reset.addEventListener('click', () => { if(confirm('Quitter ?')) { stopTimer(); state.game.active = false; els.modals.start.classList.add('visible'); globe.controls().autoRotate = true; } });
-els.btns.list.addEventListener('click', () => els.panel.classList.add('open'));
-els.btns.closeList.addEventListener('click', () => els.panel.classList.remove('open'));
-els.btns.hint.addEventListener('click', () => { if(state.game.active) els.modals.hint.classList.add('visible'); });
+// --- EVENT LISTENERS ---
+// Buttons
+els.btns.start.onclick = game.start;
+els.btns.replay.onclick = () => { els.modals.end.classList.remove('visible'); els.modals.start.classList.add('visible'); };
+els.btns.reset.onclick = () => { if(confirm("Quitter la partie en cours ?")) { game.stop(); els.modals.start.classList.add('visible'); globe.controls().autoRotate = true; } };
+els.btns.list.onclick = () => els.panels.list.classList.add('open');
+els.btns.closeList.onclick = () => els.panels.list.classList.remove('open');
+els.btns.hint.onclick = () => { if(state.activeGame.running) els.modals.hint.classList.add('visible'); };
+els.btns.sound.onclick = AudioMgr.toggle;
+els.btns.share.onclick = () => {
+    const txt = `🌍 Worldle Arcade 3D\n🏆 Niveau ${state.stats.level}\n⏱️ ${els.timer.innerText}\n✅ ${state.activeGame.found.size} pays trouvés !`;
+    navigator.clipboard.writeText(txt).then(() => alert("Score copié !"));
+};
 
-// Mobile Logic
+// Input
+els.input.oninput = handleInput.type;
+
+// Mobile Keyboard Handling
 if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-    els.input.addEventListener('focus', () => { document.body.classList.add('keyboard-open'); globe.pointOfView({ lat: globe.pointOfView().lat + 20, altitude: globe.pointOfView().altitude }, 500); });
+    els.input.addEventListener('focus', () => { 
+        document.body.classList.add('keyboard-open'); 
+        globe.pointOfView({ lat: globe.pointOfView().lat + 25, altitude: globe.pointOfView().altitude }, 500);
+    });
     els.input.addEventListener('blur', () => document.body.classList.remove('keyboard-open'));
 }
 
-init();
+// Start App
+initApp();
 
 </script>
 </body>
